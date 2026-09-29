@@ -1467,6 +1467,7 @@ dependencies = [
  "dirs",
  "globset",
  "ignore",
+ "libc",
  "ort",
  "predicates",
  "reqwest",

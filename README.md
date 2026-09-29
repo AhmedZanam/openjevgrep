@@ -38,6 +38,14 @@ ojg model install
 ojg serve
 ```
 
+To start it in the background and return to your shell immediately:
+
+```bash
+ojg serve --daemon
+```
+
+The command prints the child process ID and endpoint. The model may still be loading; use `ojg status` from another terminal when it is ready. Stop a daemon with `kill <PID>` on Linux or macOS, or `Stop-Process -Id <PID>` in PowerShell on Windows. Use `Ctrl+C` to stop foreground mode.
+
 In another terminal, check both the cached model and the running server:
 
 ```bash

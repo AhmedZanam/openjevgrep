@@ -151,6 +151,9 @@ pub struct ServeCommand {
 
     #[arg(long, default_value = "verdict-1.4")]
     pub model: String,
+
+    #[arg(long)]
+    pub daemon: bool,
 }
 
 #[derive(Debug, Args)]
