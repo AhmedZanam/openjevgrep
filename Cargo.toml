@@ -21,16 +21,19 @@ path = "src/bin/ojg_eval.rs"
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+axum = "0.8.9"
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.6"
 dirs = "6"
 globset = "0.4"
 ignore = "0.4"
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "download-binaries", "tls-rustls"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
+tokenizers = "1.0.0-rc.2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time", "io-std"] }
 toml = "0.9"
 tracing = "0.1"
