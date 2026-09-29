@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod backend;
 pub mod chunk;
 pub mod config;
 pub mod error;
