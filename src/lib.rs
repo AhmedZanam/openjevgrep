@@ -8,6 +8,7 @@ pub mod error;
 pub mod eval;
 pub mod exact;
 pub mod mcp;
+pub mod model;
 pub mod output;
 pub mod retrieval;
 pub mod scanner;
