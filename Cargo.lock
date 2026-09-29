@@ -1481,6 +1481,7 @@ dependencies = [
  "tokenizers",
  "tokio",
  "toml",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "tree-sitter",

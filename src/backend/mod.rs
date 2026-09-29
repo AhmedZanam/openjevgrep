@@ -31,7 +31,7 @@ pub struct BackendHealth {
     pub model: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ModelInfo {
     pub id: String,
 }

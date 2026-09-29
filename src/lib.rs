@@ -13,5 +13,6 @@ pub mod output;
 pub mod retrieval;
 pub mod scanner;
 pub mod search;
+pub mod server;
 
 pub use error::{Error, Result};
