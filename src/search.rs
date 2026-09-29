@@ -1,0 +1,301 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
+
+use serde::Serialize;
+
+use crate::backend::{Candidate, DecisionBackend};
+use crate::chunk::{fallback_chunks, ChunkKind, SourceChunk};
+use crate::scanner::{scan_repository, ScanOptions};
+use crate::Result;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BackendMetadata {
+    pub endpoint: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchRequest {
+    pub query: String,
+    pub root: PathBuf,
+    pub scopes: Vec<PathBuf>,
+    pub backend: BackendMetadata,
+    pub options: SearchOptions,
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchOptions {
+    pub threshold: f64,
+    pub limit: usize,
+    pub batch_size: usize,
+    pub concurrency: usize,
+    pub max_file_size: u64,
+    pub max_chunk_lines: usize,
+    pub context_lines: usize,
+    pub scan: ScanOptions,
+}
+
+impl Default for SearchOptions {
+    fn default() -> Self {
+        Self {
+            threshold: 0.70,
+            limit: 20,
+            batch_size: 16,
+            concurrency: 4,
+            max_file_size: 1_048_576,
+            max_chunk_lines: 160,
+            context_lines: 2,
+            scan: ScanOptions::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SearchResult {
+    pub path: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub symbol: Option<String>,
+    pub kind: String,
+    pub probability: f64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Coverage {
+    pub files_scanned: usize,
+    pub chunks_found: usize,
+    pub chunks_evaluated: usize,
+    pub partial: bool,
+    pub partial_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Timing {
+    pub scan_ms: u64,
+    pub evaluation_ms: u64,
+    pub total_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchResponse {
+    pub query: String,
+    pub root: PathBuf,
+    pub backend: BackendMetadata,
+    pub results: Vec<SearchResult>,
+    pub coverage: Coverage,
+    pub timing: Timing,
+}
+
+#[derive(Debug, Clone)]
+struct CandidateRecord {
+    candidate: Candidate,
+    chunk: SourceChunk,
+}
+
+pub async fn search(
+    request: SearchRequest,
+    backend: Arc<dyn DecisionBackend>,
+) -> Result<SearchResponse> {
+    let total_start = Instant::now();
+    let scan_start = Instant::now();
+    let scan_options = ScanOptions {
+        max_file_size: request.options.max_file_size,
+        ..request.options.scan.clone()
+    };
+    let scan = scan_repository(&request.root, &scan_options)?;
+    let scoped_files: Vec<_> = scan
+        .included
+        .iter()
+        .filter(|file| in_scope(&request.root, &file.relative_path, &request.scopes))
+        .collect();
+    let scan_ms = scan_start.elapsed().as_millis() as u64;
+
+    let mut records = Vec::new();
+    let mut source_by_path = HashMap::new();
+    for file in scoped_files {
+        source_by_path.insert(path_string(&file.relative_path), file.content.clone());
+        let chunks = fallback_chunks(
+            file,
+            request.options.max_chunk_lines,
+            request.options.context_lines,
+        );
+        for (index, chunk) in chunks.into_iter().enumerate() {
+            let id = format!(
+                "{}:{}-{}:{}",
+                path_string(&chunk.path),
+                chunk.start_line,
+                chunk.end_line,
+                index
+            );
+            records.push(CandidateRecord {
+                candidate: Candidate {
+                    id,
+                    path: chunk.path.clone(),
+                    symbol: chunk.symbol.clone(),
+                    start_line: chunk.start_line,
+                    end_line: chunk.end_line,
+                    content: chunk.content.clone(),
+                },
+                chunk,
+            });
+        }
+    }
+
+    let evaluation_start = Instant::now();
+    let mut partial_reasons = Vec::new();
+    let mut evaluated = 0;
+    let mut raw_results = Vec::new();
+    let batch_size = request.options.batch_size.max(1);
+    for batch in records.chunks(batch_size) {
+        let candidates: Vec<_> = batch.iter().map(|record| record.candidate.clone()).collect();
+        match backend.score_batch(&request.query, &candidates).await {
+            Ok(scores) => {
+                evaluated += scores.len();
+                for score in scores {
+                    if let Some(record) = batch
+                        .iter()
+                        .find(|record| record.candidate.id == score.candidate_id)
+                    {
+                        if score.probability >= request.options.threshold {
+                            raw_results.push(RawResult {
+                                path: path_string(&record.chunk.path),
+                                start_line: record.chunk.start_line,
+                                end_line: record.chunk.end_line,
+                                symbol: record.chunk.symbol.clone(),
+                                kind: chunk_kind(&record.chunk.kind).to_string(),
+                                probability: score.probability,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(error) => partial_reasons.push(error.to_string()),
+        }
+    }
+    let evaluation_ms = evaluation_start.elapsed().as_millis() as u64;
+
+    let merged = merge_results(raw_results, &source_by_path);
+    let mut results = merged;
+    results.sort_by(|left, right| {
+        right
+            .probability
+            .total_cmp(&left.probability)
+            .then_with(|| left.path.cmp(&right.path))
+            .then_with(|| left.start_line.cmp(&right.start_line))
+    });
+    results.truncate(request.options.limit.max(1));
+
+    Ok(SearchResponse {
+        query: request.query,
+        root: request.root,
+        backend: request.backend,
+        results,
+        coverage: Coverage {
+            files_scanned: source_by_path.len(),
+            chunks_found: records.len(),
+            chunks_evaluated: evaluated,
+            partial: !partial_reasons.is_empty(),
+            partial_reason: (!partial_reasons.is_empty()).then(|| partial_reasons.join("; ")),
+        },
+        timing: Timing {
+            scan_ms,
+            evaluation_ms,
+            total_ms: total_start.elapsed().as_millis() as u64,
+        },
+    })
+}
+
+#[derive(Debug)]
+struct RawResult {
+    path: String,
+    start_line: usize,
+    end_line: usize,
+    symbol: Option<String>,
+    kind: String,
+    probability: f64,
+}
+
+fn merge_results(raw_results: Vec<RawResult>, source_by_path: &HashMap<String, String>) -> Vec<SearchResult> {
+    let mut sorted = raw_results;
+    sorted.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.start_line.cmp(&right.start_line))
+            .then_with(|| right.probability.total_cmp(&left.probability))
+    });
+    let mut merged: Vec<RawResult> = Vec::new();
+    for result in sorted {
+        if let Some(previous) = merged.last_mut() {
+            if previous.path == result.path && result.start_line <= previous.end_line + 1 {
+                previous.end_line = previous.end_line.max(result.end_line);
+                if result.probability > previous.probability {
+                    previous.probability = result.probability;
+                    previous.symbol = result.symbol.clone();
+                    previous.kind = result.kind.clone();
+                }
+                continue;
+            }
+        }
+        merged.push(result);
+    }
+    merged
+        .into_iter()
+        .map(|result| SearchResult {
+            source: source_by_path
+                .get(&result.path)
+                .map(|source| source_range(source, result.start_line, result.end_line))
+                .unwrap_or_default(),
+            path: result.path,
+            start_line: result.start_line,
+            end_line: result.end_line,
+            symbol: result.symbol,
+            kind: result.kind,
+            probability: result.probability,
+        })
+        .collect()
+}
+
+fn source_range(source: &str, start_line: usize, end_line: usize) -> String {
+    let mut lines: Vec<&str> = source.split('\n').collect();
+    if source.ends_with('\n') {
+        lines.pop();
+    }
+    lines
+        .get(start_line.saturating_sub(1)..end_line.min(lines.len()))
+        .unwrap_or(&[])
+        .iter()
+        .map(|line| line.trim_end_matches('\r'))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn in_scope(root: &Path, relative: &Path, scopes: &[PathBuf]) -> bool {
+    if scopes.is_empty() {
+        return true;
+    }
+    scopes.iter().any(|scope| {
+        let scope = if scope.is_absolute() {
+            scope
+                .strip_prefix(root)
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|_| scope.clone())
+        } else {
+            scope.clone()
+        };
+        relative.starts_with(scope)
+    })
+}
+
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn chunk_kind(kind: &ChunkKind) -> &'static str {
+    match kind {
+        ChunkKind::Paragraph => "paragraph",
+        ChunkKind::Lines => "lines",
+    }
+}
