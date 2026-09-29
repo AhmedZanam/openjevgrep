@@ -4,6 +4,7 @@ pub mod chunk;
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod daemon;
 pub mod error;
 pub mod eval;
 pub mod exact;

@@ -13,13 +13,22 @@ fn parses_model_install() {
 
 #[test]
 fn parses_serve_options() {
-    let cli =
-        Cli::try_parse_from(["ojg", "serve", "--host", "127.0.0.1", "--port", "8080"]).unwrap();
+    let cli = Cli::try_parse_from([
+        "ojg",
+        "serve",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8080",
+        "--daemon",
+    ])
+    .unwrap();
 
     match cli.command.unwrap() {
         Command::Serve(command) => {
             assert_eq!(command.host, "127.0.0.1");
             assert_eq!(command.port, 8080);
+            assert!(command.daemon);
         }
         _ => panic!("expected serve command"),
     }

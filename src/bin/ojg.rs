@@ -10,6 +10,7 @@ use ojg_core::cache::{default_cache_directory, FileScoreCache, ScoreCache};
 use ojg_core::cli::{Cli, Command, ModelAction, SearchFlags};
 use ojg_core::commands::{check_backend, inspect_repository, InspectOptions};
 use ojg_core::config::{load_config, AppConfig, ProcessEnv};
+use ojg_core::daemon::spawn_server;
 use ojg_core::exact::{exact_search, ExactOptions};
 use ojg_core::mcp::run_stdio;
 use ojg_core::model::{ModelId, ModelStore};
@@ -147,6 +148,13 @@ fn run() -> Result<()> {
         }
         Some(Command::Serve(args)) => {
             let model = ModelId::parse(&args.model)?;
+            if args.daemon {
+                let pid = spawn_server(&args)?;
+                println!("server: starting");
+                println!("pid: {pid}");
+                println!("endpoint: http://{}:{}", args.host, args.port);
+                return Ok(());
+            }
             let store = ModelStore::from_default()?;
             let runtime = tokio::runtime::Runtime::new()?;
             let files = runtime.block_on(store.ensure(model))?;
