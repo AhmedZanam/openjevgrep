@@ -29,3 +29,4 @@ coverage/
 # Keep planning/skill artifacts out of the product repository
 /docs/
 /.codex/
+**/SKILL.md
