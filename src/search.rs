@@ -159,6 +159,7 @@ pub async fn search(
     let mut partial_reasons = Vec::new();
     let mut evaluated = 0;
     let mut raw_results = Vec::new();
+    let batch_size = request.options.batch_size.max(1);
     let evaluation_records = if uses_hierarchical_retrieval(
         records.len(),
         request.options.hierarchical_threshold,
@@ -220,7 +221,6 @@ pub async fn search(
     } else {
         records.clone()
     };
-    let batch_size = request.options.batch_size.max(1);
     for batch in evaluation_records.chunks(batch_size) {
         let candidates: Vec<_> = batch.iter().map(|record| record.candidate.clone()).collect();
         match backend.score_batch(&request.query, &candidates).await {
