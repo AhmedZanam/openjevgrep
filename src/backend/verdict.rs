@@ -128,10 +128,12 @@ impl LocalVerdictBackend {
         let prompts: Vec<String> = candidates
             .iter()
             .map(|candidate| {
-                let instructions = format!(
-                    "Does candidate {} contain information that helps answer the user's repository search question?",
-                    candidate.id
-                );
+                let instructions = candidate.instructions.clone().unwrap_or_else(|| {
+                    format!(
+                        "Does candidate {} contain information that helps answer the user's repository search question?",
+                        candidate.id
+                    )
+                });
                 prompt_for_noul(&instructions, query).0
             })
             .collect();

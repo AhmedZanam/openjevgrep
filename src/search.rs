@@ -164,6 +164,7 @@ async fn search_internal(
                     id,
                     path: chunk.path.clone(),
                     symbol: chunk.symbol.clone(),
+                    instructions: None,
                     start_line: chunk.start_line,
                     end_line: chunk.end_line,
                     content: chunk.content.clone(),
@@ -186,6 +187,7 @@ async fn search_internal(
                     id: format!("__file__:{path}"),
                     path: PathBuf::from(path),
                     symbol: None,
+                    instructions: None,
                     start_line: 1,
                     end_line: 1,
                     content: deterministic_file_preview(

@@ -140,6 +140,7 @@ async fn system_one(
             id: id.clone(),
             path: Default::default(),
             symbol: None,
+            instructions: Some(question.instructions.clone()),
             start_line: 0,
             end_line: 0,
             content: question.instructions.clone(),

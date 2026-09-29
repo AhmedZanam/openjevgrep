@@ -33,6 +33,16 @@ impl DecisionBackend for FakeBackend {
         if self.failure {
             return Err(anyhow::anyhow!("inference failed"));
         }
+        if candidates.len() == 2 {
+            assert_eq!(
+                candidates[0].instructions.as_deref(),
+                Some("Does candidate-1 help?")
+            );
+            assert_eq!(
+                candidates[1].instructions.as_deref(),
+                Some("Does candidate-2 help?")
+            );
+        }
         Ok(candidates
             .iter()
             .enumerate()

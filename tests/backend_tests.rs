@@ -19,6 +19,7 @@ fn candidate(id: &str, content: &str) -> Candidate {
         id: id.to_string(),
         path: "src/auth.rs".into(),
         symbol: Some("validate".to_string()),
+        instructions: None,
         start_line: 10,
         end_line: 12,
         content: content.to_string(),

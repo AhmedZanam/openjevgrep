@@ -13,6 +13,7 @@ pub struct Candidate {
     pub id: String,
     pub path: PathBuf,
     pub symbol: Option<String>,
+    pub instructions: Option<String>,
     pub start_line: usize,
     pub end_line: usize,
     pub content: String,
