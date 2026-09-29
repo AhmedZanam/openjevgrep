@@ -1,0 +1,14 @@
+[
+  {
+    "query": "where are access tokens validated?",
+    "expected_files": ["src/auth/middleware.rs"]
+  },
+  {
+    "query": "what invalidates a user's cache?",
+    "expected_files": ["src/cache.rs"]
+  },
+  {
+    "query": "where do we retry a request?",
+    "expected_files": ["src/retry.rs"]
+  }
+]

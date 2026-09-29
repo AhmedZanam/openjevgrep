@@ -148,15 +148,21 @@ pub struct CliOverrides {
 
 impl Cli {
     pub fn overrides(&self) -> CliOverrides {
+        self.search.overrides()
+    }
+}
+
+impl SearchFlags {
+    pub fn overrides(&self) -> CliOverrides {
         CliOverrides {
-            endpoint: self.search.endpoint.clone(),
-            model: self.search.model.clone(),
-            threshold: self.search.threshold,
-            limit: self.search.limit,
-            max_file_size: self.search.max_file_size,
-            max_chunk_lines: self.search.max_chunk_lines,
-            context_lines: self.search.context,
-            no_cache: self.search.no_cache,
+            endpoint: self.endpoint.clone(),
+            model: self.model.clone(),
+            threshold: self.threshold,
+            limit: self.limit,
+            max_file_size: self.max_file_size,
+            max_chunk_lines: self.max_chunk_lines,
+            context_lines: self.context,
+            no_cache: self.no_cache,
             ..CliOverrides::default()
         }
     }
