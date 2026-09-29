@@ -27,7 +27,7 @@ pub fn source_chunks(file: &ScannedFile, options: &ChunkOptions) -> Result<Vec<S
         return Ok(fallback_chunks(file, options.max_lines, options.context_lines));
     };
     let mut parser = Parser::new();
-    parser.set_language(&language_for(language_kind))?;
+    parser.set_language(language_for(language_kind))?;
     let Some(tree) = parser.parse(&file.content, None) else {
         return Ok(fallback_chunks(file, options.max_lines, options.context_lines));
     };

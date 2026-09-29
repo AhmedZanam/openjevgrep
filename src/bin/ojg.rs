@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::Parser;
 use ojg_core::backend::openjev::OpenJevBackend;
+use ojg_core::cache::{default_cache_directory, FileScoreCache, ScoreCache};
 use ojg_core::cli::{Cli, Command, SearchFlags};
 use ojg_core::commands::{check_backend, inspect_repository, InspectOptions};
 use ojg_core::config::{load_config, AppConfig, ProcessEnv};
@@ -86,15 +87,13 @@ fn run() -> Result<()> {
             Ok(())
         }
         Some(Command::Cache(args)) => {
-            let cache = ojg_core::cache::FileScoreCache::new(
-                &ojg_core::cache::default_cache_directory()?,
-            )?;
+            let cache = FileScoreCache::new(&default_cache_directory()?)?;
             if args.clear {
                 let runtime = tokio::runtime::Runtime::new()?;
-                runtime.block_on(ojg_core::cache::ScoreCache::clear(&cache))?;
+                runtime.block_on(cache.clear())?;
                 println!("cache cleared");
             } else {
-                println!("{}", ojg_core::cache::default_cache_directory()?.display());
+                println!("{}", default_cache_directory()?.display());
             }
             Ok(())
         }
