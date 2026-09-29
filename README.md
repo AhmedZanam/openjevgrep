@@ -4,7 +4,7 @@
 
 <h1 align="center">OpenJevGrep</h1>
 
-OpenJevGrep (`ojg`) is a local-first semantic search CLI for source repositories. It scans a repository safely, splits supported languages into source-aware chunks, sends relevance decisions to a local OpenJev service, and prints ranked results with source context.
+OpenJevGrep (`ojg`) is a local-first semantic search CLI for source repositories. It scans a repository safely, splits supported languages into source-aware chunks, sends relevance decisions to a local OpenJev-compatible service, and prints ranked results with source context.
 
 ## Supported systems
 
@@ -17,7 +17,7 @@ The code uses Rust's cross-platform filesystem, networking, and path APIs. CI ve
 ## Requirements
 
 - Rust stable for building from source
-- OpenJev running locally for semantic search
+- The embedded Verdict server for standalone semantic search, or a compatible OpenJev service
 
 The default backend is:
 
@@ -26,6 +26,39 @@ http://127.0.0.1:8080
 ```
 
 Exact search, repository inspection, and cache management work without a running backend.
+
+## Embedded semantic server
+
+The default local server runs Verdict 1.4 through ONNX Runtime on the CPU. Model weights are downloaded on demand and are not bundled in the executable or committed to this repository. The first download is approximately 606 MB.
+
+Install and start the embedded server:
+
+```bash
+ojg model install
+ojg serve
+```
+
+In another terminal, check both the cached model and the running server:
+
+```bash
+ojg status
+```
+
+The model cache is resolved with the platform cache API:
+
+- Linux: `$XDG_CACHE_HOME/openjevgrep/models/verdict-1.4`, or `~/.cache/openjevgrep/models/verdict-1.4`
+- macOS: `~/Library/Caches/openjevgrep/models/verdict-1.4`
+- Windows: `%LOCALAPPDATA%\openjevgrep\models\verdict-1.4`
+
+Use `ojg model path` to print the active model directory. The store pins the model revision and verifies SHA-256 hashes before activating it. The embedded path is CPU-only; GPU execution is not required.
+
+The default model is Verdict 1.4 from [heman10x/rlcd-modernbert-151m](https://huggingface.co/heman10x/rlcd-modernbert-151m). The model repository identifies the weights as Apache-2.0; review its license and terms before redistribution.
+
+The existing remote backend remains available:
+
+```bash
+ojg --endpoint http://127.0.0.1:9000 "where is authentication checked?"
+```
 
 ## Install
 
@@ -47,7 +80,7 @@ The binary is written to `target/release/ojg` on Unix-like systems and `target/r
 
 ## Quick start
 
-Start OpenJev, then search the current repository:
+Start `ojg serve`, then search the current repository:
 
 ```bash
 ojg "where is authentication checked?"
@@ -174,4 +207,4 @@ cargo test --all
 cargo build --release
 ```
 
-The OpenJev service is intentionally separate from this repository. Backend tests use a local HTTP test server; live backend checks require an OpenJev instance at the configured endpoint.
+The embedded server and model store are covered by local tests without downloading weights. Backend tests use a local HTTP test server; remote live checks require an OpenJev instance at the configured endpoint.

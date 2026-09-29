@@ -10,7 +10,10 @@ fn help_names_the_primary_binary_and_search_modes() {
         .success()
         .stdout(contains("OpenJevGrep"))
         .stdout(contains("search"))
-        .stdout(contains("exact"));
+        .stdout(contains("exact"))
+        .stdout(contains("model"))
+        .stdout(contains("serve"))
+        .stdout(contains("status"));
 }
 
 #[test]
