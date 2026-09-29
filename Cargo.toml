@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Local-first semantic grep powered by OpenJev"
 license = "Apache-2.0"
-readme = false
+readme = "README.md"
 
 [lib]
 name = "ojg_core"
