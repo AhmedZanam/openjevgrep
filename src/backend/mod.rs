@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::Result;
 
 pub mod openjev;
+pub mod verdict;
 
 #[derive(Debug, Clone)]
 pub struct Candidate {
