@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v[0-9]+.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,9 +21,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: taiki-e/create-gh-release-action@v1
         with:
-          branch: ^master$
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
 
   binaries:
     needs: create-release
@@ -42,10 +50,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ojg
           target: ${{ matrix.target }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           locked: true
           tar: unix
           zip: windows
