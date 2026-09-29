@@ -68,7 +68,11 @@ async fn downloads_atomically_and_writes_manifest_last() {
         .join("verdict-1.4")
         .read_dir()
         .unwrap()
-        .any(|entry| entry.unwrap().file_name().to_string_lossy().ends_with(".part")));
+        .any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".part")));
 }
 
 #[tokio::test]
@@ -79,7 +83,10 @@ async fn rejects_checksum_mismatch_without_activation() {
         .respond_with(ResponseTemplate::new(200).set_body_string("tampered"))
         .mount(&server)
         .await;
-    for (name, body) in [("tokenizer.json", "tokenizer"), ("calibrator.json", "calibrator")] {
+    for (name, body) in [
+        ("tokenizer.json", "tokenizer"),
+        ("calibrator.json", "calibrator"),
+    ] {
         Mock::given(method("GET"))
             .and(path(format!("/{}", name)))
             .respond_with(ResponseTemplate::new(200).set_body_string(body))
@@ -93,7 +100,10 @@ async fn rejects_checksum_mismatch_without_activation() {
 
     assert!(error.to_string().contains("checksum mismatch"));
     assert!(!store.manifest_path(ModelId::Verdict14).exists());
-    assert!(!store.model_directory(ModelId::Verdict14).join("model.onnx").exists());
+    assert!(!store
+        .model_directory(ModelId::Verdict14)
+        .join("model.onnx")
+        .exists());
 }
 
 #[tokio::test]

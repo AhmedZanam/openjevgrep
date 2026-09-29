@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use ort::{session::Session, value::Tensor};
 use serde::Deserialize;
-use tokenizers::{from_json_file, pipeline::PipelineTokenizer};
+use tokenizers::{PaddingParams, Tokenizer, TruncationParams};
 
 use super::{BackendHealth, Candidate, DecisionBackend, ModelInfo, Score};
 use crate::model::ModelFiles;
@@ -25,7 +25,7 @@ pub struct Calibrator {
 
 pub struct LocalVerdictBackend {
     session: Mutex<Session>,
-    tokenizer: PipelineTokenizer,
+    tokenizer: Tokenizer,
     calibrator: Calibrator,
 }
 
@@ -99,8 +99,15 @@ pub fn truncate_tokens(tokens: &[u32], max_length: usize) -> Vec<u32> {
 
 impl LocalVerdictBackend {
     pub fn load(files: ModelFiles) -> Result<Self> {
-        let tokenizer = from_json_file(&files.tokenizer_path)
+        let mut tokenizer = Tokenizer::from_file(&files.tokenizer_path)
             .map_err(|error| anyhow!("loading tokenizer: {error}"))?;
+        tokenizer
+            .with_truncation(Some(TruncationParams {
+                max_length: VERDICT_MAX_LEN,
+                ..Default::default()
+            }))
+            .map_err(|error| anyhow!("configuring tokenizer truncation: {error}"))?;
+        tokenizer.with_padding(Some(PaddingParams::default()));
         let calibrator: Calibrator =
             serde_json::from_slice(&std::fs::read(&files.calibrator_path)?)
                 .context("parsing Verdict calibration")?;
@@ -128,18 +135,9 @@ impl LocalVerdictBackend {
                 prompt_for_noul(&instructions, query).0
             })
             .collect();
-        let options = tokenizers::pipeline::EncodeOptions {
-            truncation: tokenizers::pipeline::Override::With(tokenizers::TruncationParams {
-                max_length: VERDICT_MAX_LEN,
-                ..Default::default()
-            }),
-            padding: tokenizers::pipeline::Override::With(tokenizers::PaddingParams::default()),
-            ..Default::default()
-        };
         let encodings = self
             .tokenizer
-            .encode(prompts, &options)
-            .wait()
+            .encode_batch(prompts.iter().map(String::as_str).collect(), true)
             .map_err(|error| anyhow!("encoding Verdict prompts: {error}"))?;
         let sequence_length = encodings
             .first()
@@ -156,11 +154,10 @@ impl LocalVerdictBackend {
                     "Verdict tokenizer did not pad the batch consistently"
                 ));
             }
-            input_ids.extend(encoding.ids().iter().map(|token| i64::from(token.id())));
+            input_ids.extend(encoding.get_ids().iter().map(|token| i64::from(*token)));
             attention_mask.extend(
                 encoding
-                    .attention_mask()
-                    .unwrap_or(&vec![1; sequence_length])
+                    .get_attention_mask()
                     .iter()
                     .map(|value| i64::from(*value)),
             );

@@ -128,7 +128,8 @@ impl ModelStore {
         }
 
         for (filename, expected_hash) in &self.expected_hashes {
-            self.download_file(&directory, filename, expected_hash).await?;
+            self.download_file(&directory, filename, expected_hash)
+                .await?;
         }
 
         let manifest = Manifest {
@@ -164,7 +165,11 @@ impl ModelStore {
         if manifest.revision != MODEL_REVISION || manifest.hashes != self.expected_hashes {
             return Ok(false);
         }
-        for path in [&files.model_path, &files.tokenizer_path, &files.calibrator_path] {
+        for path in [
+            &files.model_path,
+            &files.tokenizer_path,
+            &files.calibrator_path,
+        ] {
             if !path.is_file() {
                 return Ok(false);
             }
@@ -178,7 +183,12 @@ impl ModelStore {
         Ok(true)
     }
 
-    async fn download_file(&self, directory: &Path, filename: &str, expected_hash: &str) -> Result<()> {
+    async fn download_file(
+        &self,
+        directory: &Path,
+        filename: &str,
+        expected_hash: &str,
+    ) -> Result<()> {
         let url = format!("{}/{}", self.base_url.trim_end_matches('/'), filename);
         let response = self.client.get(url).send().await?.error_for_status()?;
         let temporary = directory.join(format!(".{filename}.part"));
