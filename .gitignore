@@ -1,0 +1,31 @@
+# Rust build output
+/target/
+
+# Local workspaces and execution ledgers
+/.worktrees/
+/.superpowers/
+
+# Local configuration and caches
+.openjevgrep.toml
+.ojgignore
+.ojg-cache/
+*.ojg-cache
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets and test output
+.env
+.env.*
+*.pem
+*.key
+credentials.*
+secrets.*
+coverage/
+
+# Keep planning/skill artifacts out of the product repository
+/docs/
+/.codex/
