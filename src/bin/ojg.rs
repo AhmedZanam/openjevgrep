@@ -4,15 +4,19 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
 use ojg_core::backend::openjev::OpenJevBackend;
+use ojg_core::backend::verdict::LocalVerdictBackend;
 use ojg_core::backend::DecisionBackend;
 use ojg_core::cache::{default_cache_directory, FileScoreCache, ScoreCache};
-use ojg_core::cli::{Cli, Command, SearchFlags};
+use ojg_core::cli::{Cli, Command, ModelAction, SearchFlags};
 use ojg_core::commands::{check_backend, inspect_repository, InspectOptions};
 use ojg_core::config::{load_config, AppConfig, ProcessEnv};
 use ojg_core::exact::{exact_search, ExactOptions};
 use ojg_core::mcp::run_stdio;
+use ojg_core::model::{ModelId, ModelStore};
 use ojg_core::output::{render_json, render_text, OutputMode};
 use ojg_core::search::{search, search_with_cache, BackendMetadata, SearchOptions, SearchRequest};
+use ojg_core::server::{run_server, ServerConfig};
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -124,6 +128,39 @@ fn run() -> Result<()> {
             }
             Ok(())
         }
+        Some(Command::Model(args)) => {
+            let store = ModelStore::from_default()?;
+            match args.action {
+                ModelAction::Install => {
+                    let model = ModelId::Verdict14;
+                    let runtime = tokio::runtime::Runtime::new()?;
+                    let files = runtime.block_on(store.ensure(model))?;
+                    println!("model: {}", model.as_str());
+                    println!("revision: {}", ojg_core::model::MODEL_REVISION);
+                    println!("path: {}", files.directory.display());
+                }
+                ModelAction::Path => {
+                    println!("{}", store.model_directory(ModelId::Verdict14).display())
+                }
+            }
+            Ok(())
+        }
+        Some(Command::Serve(args)) => {
+            let model = ModelId::parse(&args.model)?;
+            let store = ModelStore::from_default()?;
+            let runtime = tokio::runtime::Runtime::new()?;
+            let files = runtime.block_on(store.ensure(model))?;
+            let backend = Arc::new(LocalVerdictBackend::load(files)?);
+            runtime.block_on(run_server(
+                ServerConfig {
+                    host: args.host,
+                    port: args.port,
+                    model: model.as_str().to_string(),
+                },
+                backend,
+            ))
+        }
+        Some(Command::Status(args)) => run_status(args.host, args.port, args.model),
         Some(Command::Mcp) => {
             let backend = Arc::new(OpenJevBackend::new(config.backend, reqwest::Client::new())?);
             let runtime = tokio::runtime::Runtime::new()?;
@@ -147,6 +184,43 @@ fn run() -> Result<()> {
             Ok(())
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct StatusModelsResponse {
+    data: Vec<ojg_core::backend::ModelInfo>,
+}
+
+fn run_status(host: String, port: u16, model: String) -> Result<()> {
+    let selected = ModelId::parse(&model)?;
+    let store = ModelStore::from_default()?;
+    let manifest = store.manifest_path(selected);
+    if !manifest.is_file() {
+        return Err(anyhow::anyhow!(
+            "model {} is not installed; run `ojg model install`",
+            selected.as_str()
+        ));
+    }
+    let endpoint = format!("http://{host}:{port}/v1/models");
+    let runtime = tokio::runtime::Runtime::new()?;
+    let models: StatusModelsResponse = runtime.block_on(async {
+        let response = reqwest::Client::new()
+            .get(endpoint)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok::<StatusModelsResponse, anyhow::Error>(response.json().await?)
+    })?;
+    if !models.data.iter().any(|item| item.id == selected.as_str()) {
+        return Err(anyhow::anyhow!(
+            "local server does not expose model {}",
+            selected.as_str()
+        ));
+    }
+    println!("model: installed");
+    println!("server: ok");
+    println!("model: {}", selected.as_str());
+    Ok(())
 }
 
 fn run_search(

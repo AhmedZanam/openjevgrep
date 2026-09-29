@@ -32,6 +32,9 @@ pub enum Command {
     Models,
     Config,
     Cache(CacheCommand),
+    Model(ModelCommand),
+    Serve(ServeCommand),
+    Status(StatusCommand),
     Mcp,
     Completions(CompletionsCommand),
 }
@@ -124,6 +127,42 @@ pub struct ExactCommand {
 pub struct CacheCommand {
     #[arg(long)]
     pub clear: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ModelCommand {
+    #[command(subcommand)]
+    pub action: ModelAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ModelAction {
+    Install,
+    Path,
+}
+
+#[derive(Debug, Args)]
+pub struct ServeCommand {
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+
+    #[arg(long, default_value_t = 8080)]
+    pub port: u16,
+
+    #[arg(long, default_value = "verdict-1.4")]
+    pub model: String,
+}
+
+#[derive(Debug, Args)]
+pub struct StatusCommand {
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+
+    #[arg(long, default_value_t = 8080)]
+    pub port: u16,
+
+    #[arg(long, default_value = "verdict-1.4")]
+    pub model: String,
 }
 
 #[derive(Debug, Args)]
