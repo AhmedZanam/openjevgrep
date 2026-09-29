@@ -1,4 +1,8 @@
-# OpenJevGrep
+<p align="center">
+  <img src="assets/openjevgrep-logo.png" alt="OpenJevGrep pixel-art logo" width="112">
+</p>
+
+<h1 align="center">OpenJevGrep</h1>
 
 OpenJevGrep (`ojg`) is a local-first semantic search CLI for source repositories. It scans a repository safely, splits supported languages into source-aware chunks, sends relevance decisions to a local OpenJev service, and prints ranked results with source context.
 
