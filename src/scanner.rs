@@ -6,6 +6,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use walkdir::WalkDir;
 
+use crate::chunk::language::language_for_path;
 use crate::Result;
 
 #[derive(Debug, Clone)]
@@ -221,7 +222,7 @@ pub fn scan_repository(root: &Path, options: &ScanOptions) -> Result<ScanReport>
         report.included.push(ScannedFile {
             path: path.to_path_buf(),
             relative_path: relative.clone(),
-            language: language_for_path(&relative),
+            language: language_for_path(&relative).map(|language| language.as_str().to_string()),
             content,
         });
     }
@@ -309,19 +310,4 @@ fn is_generated(path: &Path) -> bool {
         || name.ends_with(".min.css")
         || name.ends_with(".map")
         || name.contains("generated")
-}
-
-fn language_for_path(path: &Path) -> Option<String> {
-    let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
-    let language = match extension.as_str() {
-        "rs" => "rust",
-        "py" => "python",
-        "js" | "jsx" | "mjs" | "cjs" => "javascript",
-        "ts" => "typescript",
-        "tsx" => "tsx",
-        "java" => "java",
-        "go" => "go",
-        _ => return None,
-    };
-    Some(language.to_string())
 }

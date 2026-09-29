@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -6,7 +6,9 @@ use std::time::Instant;
 use serde::Serialize;
 
 use crate::backend::{Candidate, DecisionBackend};
-use crate::chunk::{fallback_chunks, ChunkKind, SourceChunk};
+use crate::chunk::tree_sitter::{deterministic_file_preview, source_chunks, ChunkOptions};
+use crate::chunk::{ChunkKind, SourceChunk};
+use crate::retrieval::uses_hierarchical_retrieval;
 use crate::scanner::{scan_repository, ScanOptions};
 use crate::Result;
 
@@ -34,6 +36,7 @@ pub struct SearchOptions {
     pub max_file_size: u64,
     pub max_chunk_lines: usize,
     pub context_lines: usize,
+    pub hierarchical_threshold: usize,
     pub scan: ScanOptions,
 }
 
@@ -47,6 +50,7 @@ impl Default for SearchOptions {
             max_file_size: 1_048_576,
             max_chunk_lines: 160,
             context_lines: 2,
+            hierarchical_threshold: 150,
             scan: ScanOptions::default(),
         }
     }
@@ -115,13 +119,20 @@ pub async fn search(
 
     let mut records = Vec::new();
     let mut source_by_path = HashMap::new();
+    let mut chunks_by_path = HashMap::new();
+    let mut files_by_path = HashMap::new();
     for file in scoped_files {
-        source_by_path.insert(path_string(&file.relative_path), file.content.clone());
-        let chunks = fallback_chunks(
+        let path = path_string(&file.relative_path);
+        source_by_path.insert(path.clone(), file.content.clone());
+        files_by_path.insert(path.clone(), file.clone());
+        let chunks = source_chunks(
             file,
-            request.options.max_chunk_lines,
-            request.options.context_lines,
-        );
+            &ChunkOptions {
+                max_lines: request.options.max_chunk_lines,
+                context_lines: request.options.context_lines,
+            },
+        )?;
+        chunks_by_path.insert(path, chunks.clone());
         for (index, chunk) in chunks.into_iter().enumerate() {
             let id = format!(
                 "{}:{}-{}:{}",
@@ -148,8 +159,69 @@ pub async fn search(
     let mut partial_reasons = Vec::new();
     let mut evaluated = 0;
     let mut raw_results = Vec::new();
+    let evaluation_records = if uses_hierarchical_retrieval(
+        records.len(),
+        request.options.hierarchical_threshold,
+    ) {
+        let file_candidates: Vec<_> = chunks_by_path
+            .iter()
+            .map(|(path, chunks)| Candidate {
+                id: format!("__file__:{path}"),
+                path: PathBuf::from(path),
+                symbol: None,
+                start_line: 1,
+                end_line: 1,
+                content: deterministic_file_preview(
+                    files_by_path.get(path).expect("file preview source"),
+                    chunks,
+                    4_096,
+                ),
+            })
+            .collect();
+        let mut selected_paths = HashSet::new();
+        let mut best_file = None;
+        let mut coarse_failed = false;
+        for batch in file_candidates.chunks(batch_size) {
+            match backend.score_batch(&request.query, batch).await {
+                Ok(scores) => {
+                    for score in scores {
+                        let path = score.candidate_id.trim_start_matches("__file__:");
+                        if best_file
+                            .as_ref()
+                            .map_or(true, |(_, best_probability)| score.probability > *best_probability)
+                        {
+                            best_file = Some((path.to_string(), score.probability));
+                        }
+                        if score.probability >= request.options.threshold {
+                            selected_paths.insert(path.to_string());
+                        }
+                    }
+                }
+                Err(error) => {
+                    coarse_failed = true;
+                    partial_reasons.push(error.to_string());
+                }
+            }
+        }
+        if !coarse_failed {
+            if selected_paths.is_empty() {
+                if let Some((path, _)) = best_file {
+                    selected_paths.insert(path);
+                }
+            }
+            records
+                .iter()
+                .filter(|record| selected_paths.contains(&path_string(&record.chunk.path)))
+                .cloned()
+                .collect()
+        } else {
+            records.clone()
+        }
+    } else {
+        records.clone()
+    };
     let batch_size = request.options.batch_size.max(1);
-    for batch in records.chunks(batch_size) {
+    for batch in evaluation_records.chunks(batch_size) {
         let candidates: Vec<_> = batch.iter().map(|record| record.candidate.clone()).collect();
         match backend.score_batch(&request.query, &candidates).await {
             Ok(scores) => {
@@ -297,5 +369,9 @@ fn chunk_kind(kind: &ChunkKind) -> &'static str {
     match kind {
         ChunkKind::Paragraph => "paragraph",
         ChunkKind::Lines => "lines",
+        ChunkKind::Function => "function",
+        ChunkKind::Method => "method",
+        ChunkKind::Class => "class",
+        ChunkKind::Declaration => "declaration",
     }
 }

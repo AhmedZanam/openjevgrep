@@ -2,10 +2,17 @@ use std::path::PathBuf;
 
 use crate::scanner::ScannedFile;
 
+pub mod language;
+pub mod tree_sitter;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChunkKind {
     Paragraph,
     Lines,
+    Function,
+    Method,
+    Class,
+    Declaration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
