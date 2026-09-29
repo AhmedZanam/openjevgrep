@@ -22,7 +22,11 @@ impl DecisionBackend for FakeBackend {
         Ok(Vec::new())
     }
 
-    async fn score_batch(&self, _query: &str, candidates: &[Candidate]) -> ojg_core::Result<Vec<Score>> {
+    async fn score_batch(
+        &self,
+        _query: &str,
+        candidates: &[Candidate],
+    ) -> ojg_core::Result<Vec<Score>> {
         Ok(candidates
             .iter()
             .map(|candidate| Score {
@@ -82,7 +86,10 @@ async fn mcp_keeps_diagnostics_off_stdout() {
         )
         .await
     });
-    client_write.write_all(input.as_bytes()).await.expect("input");
+    client_write
+        .write_all(input.as_bytes())
+        .await
+        .expect("input");
     client_write.shutdown().await.expect("shutdown");
 
     let mut output = Vec::new();
@@ -91,5 +98,8 @@ async fn mcp_keeps_diagnostics_off_stdout() {
     let response: serde_json::Value =
         serde_json::from_str(std::str::from_utf8(&output).expect("utf8").trim())
             .expect("json-rpc stdout");
-    assert_eq!(response["result"]["tools"][0]["name"], "semantic_search_code");
+    assert_eq!(
+        response["result"]["tools"][0]["name"],
+        "semantic_search_code"
+    );
 }

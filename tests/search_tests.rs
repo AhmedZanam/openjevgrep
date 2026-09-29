@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use ojg_core::backend::{BackendHealth, Candidate, DecisionBackend, ModelInfo, Score};
-use ojg_core::search::{search, BackendMetadata, SearchOptions, SearchRequest};
+use ojg_core::cache::FileScoreCache;
+use ojg_core::search::{search, search_with_cache, BackendMetadata, SearchOptions, SearchRequest};
 use tempfile::tempdir;
 
 struct FakeBackend {
@@ -28,7 +29,11 @@ impl DecisionBackend for FakeBackend {
         }])
     }
 
-    async fn score_batch(&self, _query: &str, candidates: &[Candidate]) -> ojg_core::Result<Vec<Score>> {
+    async fn score_batch(
+        &self,
+        _query: &str,
+        candidates: &[Candidate],
+    ) -> ojg_core::Result<Vec<Score>> {
         let mut calls = self.calls.lock().expect("calls");
         *calls += 1;
         if self.fail_after.is_some_and(|limit| *calls > limit) {
@@ -103,7 +108,10 @@ async fn merges_overlapping_chunks_and_keeps_strongest_probability() {
     let response = search(options, backend).await.expect("search");
 
     assert_eq!(response.results.len(), 1);
-    assert_eq!((response.results[0].start_line, response.results[0].end_line), (1, 3));
+    assert_eq!(
+        (response.results[0].start_line, response.results[0].end_line),
+        (1, 3)
+    );
     assert_eq!(response.results[0].source, "one\ntwo\nthree");
 }
 
@@ -113,10 +121,7 @@ async fn partial_backend_failure_sets_coverage_and_keeps_successes() {
     std::fs::write(root.path().join("first.txt"), "first\n").expect("first");
     std::fs::write(root.path().join("second.txt"), "second\n").expect("second");
     let backend = Arc::new(FakeBackend {
-        scores: HashMap::from([
-            ("first".to_string(), 0.9),
-            ("second".to_string(), 0.9),
-        ]),
+        scores: HashMap::from([("first".to_string(), 0.9), ("second".to_string(), 0.9)]),
         calls: Mutex::new(0),
         fail_after: Some(1),
     });
@@ -128,4 +133,27 @@ async fn partial_backend_failure_sets_coverage_and_keeps_successes() {
     assert_eq!(response.results.len(), 1);
     assert!(response.coverage.partial);
     assert!(response.coverage.partial_reason.is_some());
+}
+
+#[tokio::test]
+async fn score_cache_avoids_repeating_backend_batches() {
+    let root = tempdir().expect("root");
+    let cache_root = tempdir().expect("cache root");
+    std::fs::write(root.path().join("auth.rs"), "fn auth() {}\n").expect("source");
+    let cache = Arc::new(FileScoreCache::new(cache_root.path()).expect("cache"));
+    let backend = Arc::new(FakeBackend {
+        scores: HashMap::from([("fn auth() {}".to_string(), 0.9)]),
+        calls: Mutex::new(0),
+        fail_after: None,
+    });
+
+    let first = search_with_cache(request(root.path()), backend.clone(), cache.clone())
+        .await
+        .expect("first search");
+    let second = search_with_cache(request(root.path()), backend.clone(), cache)
+        .await
+        .expect("cached search");
+
+    assert_eq!(first.results, second.results);
+    assert_eq!(*backend.calls.lock().expect("calls"), 1);
 }

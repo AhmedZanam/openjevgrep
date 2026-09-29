@@ -14,11 +14,7 @@ fn file(content: &str) -> ScannedFile {
 
 #[test]
 fn creates_paragraph_chunks_with_exact_line_ranges() {
-    let chunks = fallback_chunks(
-        &file("first line\nsecond line\n\nthird line\n"),
-        10,
-        2,
-    );
+    let chunks = fallback_chunks(&file("first line\nsecond line\n\nthird line\n"), 10, 2);
 
     assert_eq!(chunks.len(), 2);
     assert_eq!((chunks[0].start_line, chunks[0].end_line), (1, 2));
@@ -39,6 +35,8 @@ fn overlaps_line_windows_and_covers_oversized_text() {
     assert_eq!(chunks[0].kind, ChunkKind::Lines);
     assert_eq!(chunks[0].start_line, 1);
     assert_eq!(chunks[0].end_line, 4);
-    assert!(chunks.windows(2).all(|pair| pair[0].end_line >= pair[1].start_line));
+    assert!(chunks
+        .windows(2)
+        .all(|pair| pair[0].end_line >= pair[1].start_line));
     assert_eq!(chunks.last().expect("last chunk").end_line, 9);
 }

@@ -4,8 +4,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::backend::{Candidate, DecisionBackend};
+use crate::cache::{CacheKey, ScoreCache};
 use crate::chunk::tree_sitter::{deterministic_file_preview, source_chunks, ChunkOptions};
 use crate::chunk::{ChunkKind, SourceChunk};
 use crate::retrieval::uses_hierarchical_retrieval;
@@ -103,6 +105,22 @@ pub async fn search(
     request: SearchRequest,
     backend: Arc<dyn DecisionBackend>,
 ) -> Result<SearchResponse> {
+    search_internal(request, backend, None).await
+}
+
+pub async fn search_with_cache(
+    request: SearchRequest,
+    backend: Arc<dyn DecisionBackend>,
+    cache: Arc<dyn ScoreCache>,
+) -> Result<SearchResponse> {
+    search_internal(request, backend, Some(cache)).await
+}
+
+async fn search_internal(
+    request: SearchRequest,
+    backend: Arc<dyn DecisionBackend>,
+    cache: Option<Arc<dyn ScoreCache>>,
+) -> Result<SearchResponse> {
     let total_start = Instant::now();
     let scan_start = Instant::now();
     let scan_options = ScanOptions {
@@ -160,70 +178,70 @@ pub async fn search(
     let mut evaluated = 0;
     let mut raw_results = Vec::new();
     let batch_size = request.options.batch_size.max(1);
-    let evaluation_records = if uses_hierarchical_retrieval(
-        records.len(),
-        request.options.hierarchical_threshold,
-    ) {
-        let file_candidates: Vec<_> = chunks_by_path
-            .iter()
-            .map(|(path, chunks)| Candidate {
-                id: format!("__file__:{path}"),
-                path: PathBuf::from(path),
-                symbol: None,
-                start_line: 1,
-                end_line: 1,
-                content: deterministic_file_preview(
-                    files_by_path.get(path).expect("file preview source"),
-                    chunks,
-                    4_096,
-                ),
-            })
-            .collect();
-        let mut selected_paths = HashSet::new();
-        let mut best_file = None;
-        let mut coarse_failed = false;
-        for batch in file_candidates.chunks(batch_size) {
-            match backend.score_batch(&request.query, batch).await {
-                Ok(scores) => {
-                    for score in scores {
-                        let path = score.candidate_id.trim_start_matches("__file__:");
-                        if best_file
-                            .as_ref()
-                            .map_or(true, |(_, best_probability)| score.probability > *best_probability)
-                        {
-                            best_file = Some((path.to_string(), score.probability));
-                        }
-                        if score.probability >= request.options.threshold {
-                            selected_paths.insert(path.to_string());
+    let evaluation_records =
+        if uses_hierarchical_retrieval(records.len(), request.options.hierarchical_threshold) {
+            let file_candidates: Vec<_> = chunks_by_path
+                .iter()
+                .map(|(path, chunks)| Candidate {
+                    id: format!("__file__:{path}"),
+                    path: PathBuf::from(path),
+                    symbol: None,
+                    start_line: 1,
+                    end_line: 1,
+                    content: deterministic_file_preview(
+                        files_by_path.get(path).expect("file preview source"),
+                        chunks,
+                        4_096,
+                    ),
+                })
+                .collect();
+            let mut selected_paths = HashSet::new();
+            let mut best_file = None;
+            let mut coarse_failed = false;
+            for batch in file_candidates.chunks(batch_size) {
+                match score_batch_cached(&request, &backend, cache.as_ref(), batch).await {
+                    Ok(scores) => {
+                        for score in scores {
+                            let path = score.candidate_id.trim_start_matches("__file__:");
+                            if best_file.as_ref().is_none_or(|(_, best_probability)| {
+                                score.probability > *best_probability
+                            }) {
+                                best_file = Some((path.to_string(), score.probability));
+                            }
+                            if score.probability >= request.options.threshold {
+                                selected_paths.insert(path.to_string());
+                            }
                         }
                     }
-                }
-                Err(error) => {
-                    coarse_failed = true;
-                    partial_reasons.push(error.to_string());
-                }
-            }
-        }
-        if !coarse_failed {
-            if selected_paths.is_empty() {
-                if let Some((path, _)) = best_file {
-                    selected_paths.insert(path);
+                    Err(error) => {
+                        coarse_failed = true;
+                        partial_reasons.push(error.to_string());
+                    }
                 }
             }
-            records
-                .iter()
-                .filter(|record| selected_paths.contains(&path_string(&record.chunk.path)))
-                .cloned()
-                .collect()
+            if !coarse_failed {
+                if selected_paths.is_empty() {
+                    if let Some((path, _)) = best_file {
+                        selected_paths.insert(path);
+                    }
+                }
+                records
+                    .iter()
+                    .filter(|record| selected_paths.contains(&path_string(&record.chunk.path)))
+                    .cloned()
+                    .collect()
+            } else {
+                records.clone()
+            }
         } else {
             records.clone()
-        }
-    } else {
-        records.clone()
-    };
+        };
     for batch in evaluation_records.chunks(batch_size) {
-        let candidates: Vec<_> = batch.iter().map(|record| record.candidate.clone()).collect();
-        match backend.score_batch(&request.query, &candidates).await {
+        let candidates: Vec<_> = batch
+            .iter()
+            .map(|record| record.candidate.clone())
+            .collect();
+        match score_batch_cached(&request, &backend, cache.as_ref(), &candidates).await {
             Ok(scores) => {
                 evaluated += scores.len();
                 for score in scores {
@@ -280,6 +298,74 @@ pub async fn search(
     })
 }
 
+async fn score_batch_cached(
+    request: &SearchRequest,
+    backend: &Arc<dyn DecisionBackend>,
+    cache: Option<&Arc<dyn ScoreCache>>,
+    candidates: &[Candidate],
+) -> Result<Vec<crate::backend::Score>> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(cache) = cache else {
+        return backend.score_batch(&request.query, candidates).await;
+    };
+
+    let mut scores = Vec::with_capacity(candidates.len());
+    let mut misses = Vec::new();
+    for candidate in candidates {
+        let key = cache_key(request, candidate);
+        match cache.get(&key).await {
+            Ok(Some(mut score)) => {
+                score.candidate_id = candidate.id.clone();
+                scores.push(score);
+            }
+            Ok(None) | Err(_) => misses.push((candidate, key)),
+        }
+    }
+
+    if misses.is_empty() {
+        return Ok(scores);
+    }
+
+    let missing_candidates: Vec<_> = misses
+        .iter()
+        .map(|(candidate, _)| (*candidate).clone())
+        .collect();
+    let fetched = backend
+        .score_batch(&request.query, &missing_candidates)
+        .await?;
+    for score in fetched {
+        if let Some((_, key)) = misses
+            .iter()
+            .find(|(candidate, _)| candidate.id == score.candidate_id)
+        {
+            let _ = cache.put(key, &score).await;
+        }
+        scores.push(score);
+    }
+    Ok(scores)
+}
+
+fn cache_key(request: &SearchRequest, candidate: &Candidate) -> CacheKey {
+    let mut hasher = Sha256::new();
+    hasher.update(candidate.id.as_bytes());
+    hasher.update([0]);
+    hasher.update(candidate.path.to_string_lossy().as_bytes());
+    hasher.update([0]);
+    hasher.update(candidate.start_line.to_le_bytes());
+    hasher.update(candidate.end_line.to_le_bytes());
+    hasher.update(candidate.symbol.as_deref().unwrap_or_default().as_bytes());
+    hasher.update([0]);
+    hasher.update(candidate.content.as_bytes());
+    CacheKey {
+        endpoint: request.backend.endpoint.clone(),
+        model: request.backend.model.clone(),
+        query: request.query.clone(),
+        candidate_hash: format!("{:x}", hasher.finalize()),
+    }
+}
+
 #[derive(Debug)]
 struct RawResult {
     path: String,
@@ -290,7 +376,10 @@ struct RawResult {
     probability: f64,
 }
 
-fn merge_results(raw_results: Vec<RawResult>, source_by_path: &HashMap<String, String>) -> Vec<SearchResult> {
+fn merge_results(
+    raw_results: Vec<RawResult>,
+    source_by_path: &HashMap<String, String>,
+) -> Vec<SearchResult> {
     let mut sorted = raw_results;
     sorted.sort_by(|left, right| {
         left.path

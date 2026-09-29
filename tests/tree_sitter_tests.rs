@@ -10,7 +10,8 @@ fn file(path: &str, content: &str) -> ScannedFile {
         path: PathBuf::from(path),
         relative_path: PathBuf::from(path),
         content: content.to_string(),
-        language: language_for_path(PathBuf::from(path).as_path()).map(|kind| kind.as_str().to_string()),
+        language: language_for_path(PathBuf::from(path).as_path())
+            .map(|kind| kind.as_str().to_string()),
     }
 }
 
@@ -27,14 +28,20 @@ fn detects_all_supported_languages() {
     ];
 
     for (path, expected) in cases {
-        assert_eq!(language_for_path(PathBuf::from(path).as_path()), Some(expected));
+        assert_eq!(
+            language_for_path(PathBuf::from(path).as_path()),
+            Some(expected)
+        );
     }
 }
 
 #[test]
 fn extracts_rust_function_with_symbol_and_exact_lines() {
     let chunks = source_chunks(
-        &file("src/auth.rs", "fn validate(token: &str) -> bool {\n    !token.is_empty()\n}\n"),
+        &file(
+            "src/auth.rs",
+            "fn validate(token: &str) -> bool {\n    !token.is_empty()\n}\n",
+        ),
         &ChunkOptions::default(),
     )
     .expect("rust chunks");
@@ -45,23 +52,53 @@ fn extracts_rust_function_with_symbol_and_exact_lines() {
         .expect("function chunk");
     assert_eq!(function.symbol.as_deref(), Some("validate"));
     assert_eq!((function.start_line, function.end_line), (1, 3));
-    assert_eq!(function.content, "fn validate(token: &str) -> bool {\n    !token.is_empty()\n}");
+    assert_eq!(
+        function.content,
+        "fn validate(token: &str) -> bool {\n    !token.is_empty()\n}"
+    );
 }
 
 #[test]
 fn extracts_representative_declarations_for_each_grammar() {
     let cases = [
-        ("main.py", "class Auth:\n    def validate(self):\n        return True\n", ChunkKind::Class),
-        ("main.js", "function validate(token) {\n  return Boolean(token);\n}\n", ChunkKind::Function),
-        ("main.ts", "export function validate(token: string): boolean {\n  return !!token;\n}\n", ChunkKind::Function),
-        ("main.tsx", "export function Auth() {\n  return <div />;\n}\n", ChunkKind::Function),
-        ("Main.java", "class Auth {\n  boolean validate(String token) { return true; }\n}\n", ChunkKind::Class),
-        ("main.go", "func Validate(token string) bool {\n  return token != \"\"\n}\n", ChunkKind::Function),
+        (
+            "main.py",
+            "class Auth:\n    def validate(self):\n        return True\n",
+            ChunkKind::Class,
+        ),
+        (
+            "main.js",
+            "function validate(token) {\n  return Boolean(token);\n}\n",
+            ChunkKind::Function,
+        ),
+        (
+            "main.ts",
+            "export function validate(token: string): boolean {\n  return !!token;\n}\n",
+            ChunkKind::Function,
+        ),
+        (
+            "main.tsx",
+            "export function Auth() {\n  return <div />;\n}\n",
+            ChunkKind::Function,
+        ),
+        (
+            "Main.java",
+            "class Auth {\n  boolean validate(String token) { return true; }\n}\n",
+            ChunkKind::Class,
+        ),
+        (
+            "main.go",
+            "func Validate(token string) bool {\n  return token != \"\"\n}\n",
+            ChunkKind::Function,
+        ),
     ];
 
     for (path, content, expected_kind) in cases {
         let chunks = source_chunks(&file(path, content), &ChunkOptions::default()).expect("chunks");
-        assert!(chunks.iter().any(|chunk| chunk.kind == expected_kind), "{path}");
+        assert!(
+            chunks.iter().any(|chunk| chunk.kind == expected_kind),
+            "{path}"
+        );
     }
 }
 
@@ -77,7 +114,9 @@ fn oversized_chunk_preserves_source_lines() {
     assert!(chunks.len() >= 3);
     assert_eq!(chunks.first().expect("first").start_line, 1);
     assert_eq!(chunks.last().expect("last").end_line, 6);
-    assert!(chunks.iter().all(|chunk| chunk.start_line <= chunk.end_line));
+    assert!(chunks
+        .iter()
+        .all(|chunk| chunk.start_line <= chunk.end_line));
 }
 
 #[test]

@@ -19,7 +19,12 @@ pub struct CacheKey {
 impl CacheKey {
     pub fn digest(&self) -> String {
         let mut hasher = Sha256::new();
-        for value in [&self.endpoint, &self.model, &self.query, &self.candidate_hash] {
+        for value in [
+            &self.endpoint,
+            &self.model,
+            &self.query,
+            &self.candidate_hash,
+        ] {
             hasher.update(value.as_bytes());
             hasher.update([0]);
         }
@@ -68,9 +73,9 @@ impl ScoreCache for FileScoreCache {
         if final_path.is_file() {
             return Ok(());
         }
-        let temp_path = self
-            .directory
-            .join(format!(".{}.{}.tmp", key.digest(), std::process::id()));
+        let temp_path =
+            self.directory
+                .join(format!(".{}.{}.tmp", key.digest(), std::process::id()));
         let bytes = serde_json::to_vec(score)?;
         let mut file = OpenOptions::new()
             .write(true)
@@ -83,11 +88,8 @@ impl ScoreCache for FileScoreCache {
             Ok(()) => Ok(()),
             Err(error) if final_path.exists() => {
                 let _ = fs::remove_file(&temp_path);
-                if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    Ok(())
-                } else {
-                    Ok(())
-                }
+                let _ = error;
+                Ok(())
             }
             Err(error) => {
                 let _ = fs::remove_file(&temp_path);
@@ -106,6 +108,7 @@ impl ScoreCache for FileScoreCache {
 }
 
 pub fn default_cache_directory() -> Result<PathBuf> {
-    let base = dirs::cache_dir().ok_or_else(|| anyhow::anyhow!("cache directory is unavailable"))?;
+    let base =
+        dirs::cache_dir().ok_or_else(|| anyhow::anyhow!("cache directory is unavailable"))?;
     Ok(base.join("openjevgrep").join("scores"))
 }

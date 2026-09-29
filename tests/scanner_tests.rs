@@ -22,7 +22,11 @@ fn respects_ignore_files_and_default_directories() {
     write(root.path(), "ignored-by-ignore.txt", b"ignored\n");
     write(root.path(), "ignored-by-ojg.txt", b"ignored\n");
     write(root.path(), "target/generated.rs", b"fn generated() {}\n");
-    write(root.path(), "node_modules/package.js", b"module.exports = {};\n");
+    write(
+        root.path(),
+        "node_modules/package.js",
+        b"module.exports = {};\n",
+    );
 
     let report = scan_repository(root.path(), &ScanOptions::default()).expect("scan");
     let included: Vec<_> = report
@@ -53,7 +57,13 @@ fn include_pattern_can_reenable_safe_default_directory() {
 
     let report = scan_repository(root.path(), &options).expect("scan");
     assert_eq!(report.included.len(), 1);
-    assert_eq!(report.included[0].relative_path.to_string_lossy(), "vendor/library.rs");
+    assert_eq!(
+        report.included[0]
+            .relative_path
+            .to_string_lossy()
+            .replace('\\', "/"),
+        "vendor/library.rs"
+    );
 }
 
 #[test]
@@ -64,7 +74,7 @@ fn excludes_secret_binary_invalid_utf8_and_oversized_files() {
     write(root.path(), "binary.dat", b"abc\0def");
     write(root.path(), "invalid.txt", &[0xff, 0xfe]);
     write(root.path(), "large.txt", b"123456789");
-    write(root.path(), "good.txt", b"plain text\n");
+    write(root.path(), "good.txt", b"good\n");
     let options = ScanOptions {
         max_file_size: 8,
         ..ScanOptions::default()
@@ -72,7 +82,10 @@ fn excludes_secret_binary_invalid_utf8_and_oversized_files() {
 
     let report = scan_repository(root.path(), &options).expect("scan");
     assert_eq!(report.included.len(), 1);
-    assert_eq!(report.included[0].relative_path.to_string_lossy(), "good.txt");
+    assert_eq!(
+        report.included[0].relative_path.to_string_lossy(),
+        "good.txt"
+    );
     assert!(report
         .excluded
         .iter()
@@ -98,8 +111,8 @@ fn does_not_follow_symlinks_by_default() {
     std::os::unix::fs::symlink(".", root.path().join("cycle")).expect("symlink");
     write(root.path(), "kept.rs", b"fn kept() {}\n");
 
-    let report = ojg_core::scanner::scan_repository(root.path(), &ScanOptions::default())
-        .expect("scan");
+    let report =
+        ojg_core::scanner::scan_repository(root.path(), &ScanOptions::default()).expect("scan");
     assert_eq!(report.included.len(), 1);
     assert!(report
         .excluded

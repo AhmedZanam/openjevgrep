@@ -54,7 +54,10 @@ pub fn inspect_repository(root: &Path, options: &InspectOptions) -> Result<Inspe
             },
         )?;
         chunks_found += chunks.len();
-        estimated_input_bytes += chunks.iter().map(|chunk| chunk.content.len()).sum::<usize>();
+        estimated_input_bytes += chunks
+            .iter()
+            .map(|chunk| chunk.content.len())
+            .sum::<usize>();
         included_files.push(file.relative_path.clone());
     }
     Ok(InspectReport {

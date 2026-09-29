@@ -34,7 +34,11 @@ pub struct ExactMatch {
     pub text: String,
 }
 
-pub fn exact_search(query: &str, roots: &[PathBuf], options: &ExactOptions) -> Result<Vec<ExactMatch>> {
+pub fn exact_search(
+    query: &str,
+    roots: &[PathBuf],
+    options: &ExactOptions,
+) -> Result<Vec<ExactMatch>> {
     if query.is_empty() {
         return Err(anyhow::anyhow!("exact query must not be empty"));
     }
@@ -80,10 +84,7 @@ fn run_rg(query: &str, root: &Path, options: &ExactOptions) -> Result<Vec<ExactM
     }
     let output = command.arg("--").arg(query).arg(target).output()?;
     if !output.status.success() && output.status.code() != Some(1) {
-        return Err(anyhow::anyhow!(
-            "rg failed with status {}",
-            output.status
-        ));
+        return Err(anyhow::anyhow!("rg failed with status {}", output.status));
     }
     let mut matches = Vec::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {

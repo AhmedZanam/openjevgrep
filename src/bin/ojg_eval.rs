@@ -9,7 +9,10 @@ use ojg_core::eval::{calculate_metrics, EvalTask};
 use ojg_core::search::{search, BackendMetadata, SearchOptions, SearchRequest};
 
 #[derive(Debug, Parser)]
-#[command(name = "ojg-eval", about = "Measure retrieval on annotated repository questions")]
+#[command(
+    name = "ojg-eval",
+    about = "Measure retrieval on annotated repository questions"
+)]
 struct Arguments {
     #[arg(long, default_value = "fixtures/sample-repo")]
     root: PathBuf,
@@ -36,7 +39,8 @@ fn main() -> ExitCode {
 
 async fn run() -> Result<()> {
     let arguments = Arguments::parse();
-    let tasks: Vec<EvalTask> = serde_json::from_str(&std::fs::read_to_string(arguments.questions)?)?;
+    let tasks: Vec<EvalTask> =
+        serde_json::from_str(&std::fs::read_to_string(arguments.questions)?)?;
     let backend = std::sync::Arc::new(OpenJevBackend::new(
         BackendConfig {
             endpoint: arguments.endpoint.clone(),
@@ -62,7 +66,13 @@ async fn run() -> Result<()> {
             backend.clone(),
         )
         .await?;
-        rankings.push(response.results.into_iter().map(|result| result.path).collect());
+        rankings.push(
+            response
+                .results
+                .into_iter()
+                .map(|result| result.path)
+                .collect(),
+        );
     }
     let metrics = calculate_metrics(&tasks, &rankings);
     println!("Recall@1: {:.3}", metrics.recall_at_1);

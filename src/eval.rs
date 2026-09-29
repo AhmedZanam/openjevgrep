@@ -35,11 +35,10 @@ pub fn calculate_metrics(tasks: &[EvalTask], rankings: &[Vec<String>]) -> EvalMe
                 recall[index] += 1.0;
             }
         }
-        if let Some(position) = ranking.iter().position(|path| {
-            task.expected_files
-                .iter()
-                .any(|expected| expected == path)
-        }) {
+        if let Some(position) = ranking
+            .iter()
+            .position(|path| task.expected_files.iter().any(|expected| expected == path))
+        {
             reciprocal_rank += 1.0 / (position + 1) as f64;
         }
     }

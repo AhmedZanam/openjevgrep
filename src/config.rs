@@ -312,7 +312,9 @@ fn validate(config: &AppConfig) -> Result<()> {
         return Err(anyhow::anyhow!("concurrency must be greater than zero"));
     }
     if config.search.max_file_size == 0 || config.search.max_chunk_lines == 0 {
-        return Err(anyhow::anyhow!("file and chunk limits must be greater than zero"));
+        return Err(anyhow::anyhow!(
+            "file and chunk limits must be greater than zero"
+        ));
     }
     Ok(())
 }

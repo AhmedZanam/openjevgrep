@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use tree_sitter::{Language, Node, Parser};
 
 use super::language::{language_for_path, LanguageKind};
@@ -24,17 +22,29 @@ impl Default for ChunkOptions {
 
 pub fn source_chunks(file: &ScannedFile, options: &ChunkOptions) -> Result<Vec<SourceChunk>> {
     let Some(language_kind) = language_for_path(&file.relative_path) else {
-        return Ok(fallback_chunks(file, options.max_lines, options.context_lines));
+        return Ok(fallback_chunks(
+            file,
+            options.max_lines,
+            options.context_lines,
+        ));
     };
     let mut parser = Parser::new();
-    parser.set_language(language_for(language_kind))?;
+    parser.set_language(language(language_kind))?;
     let Some(tree) = parser.parse(&file.content, None) else {
-        return Ok(fallback_chunks(file, options.max_lines, options.context_lines));
+        return Ok(fallback_chunks(
+            file,
+            options.max_lines,
+            options.context_lines,
+        ));
     };
     let mut nodes = Vec::new();
     collect_relevant_nodes(tree.root_node(), &mut nodes);
     if nodes.is_empty() {
-        return Ok(fallback_chunks(file, options.max_lines, options.context_lines));
+        return Ok(fallback_chunks(
+            file,
+            options.max_lines,
+            options.context_lines,
+        ));
     }
 
     let mut chunks = Vec::new();
@@ -67,7 +77,12 @@ pub fn deterministic_file_preview(
         file.relative_path.to_string_lossy().replace('\\', "/"),
         file.language.as_deref().unwrap_or("text")
     );
-    for line in file.content.lines().filter(|line| !line.trim().is_empty()).take(8) {
+    for line in file
+        .content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(8)
+    {
         preview.push_str(line.trim());
         preview.push('\n');
     }

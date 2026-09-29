@@ -30,18 +30,13 @@ impl OpenJevBackend {
 
     async fn get_models(&self) -> Result<Vec<ModelInfo>> {
         let url = format!("{}/v1/models", self.endpoint);
-        let response = self
-            .client
-            .get(url)
-            .timeout(self.timeout)
-            .send()
-            .await?;
+        let response = self.client.get(url).timeout(self.timeout).send().await?;
         let response = ensure_success(response).await?;
         let payload: ModelsPayload = response.json().await?;
         Ok(payload.into_models())
     }
 
-    async fn post_decisions(&self, request: &SystemOneRequest) -> Result<SystemOneResponse> {
+    async fn post_decisions(&self, request: &SystemOneRequest<'_>) -> Result<SystemOneResponse> {
         let url = format!("{}/v1/systemone", self.endpoint);
         let mut attempt = 0;
         loop {
@@ -113,7 +108,8 @@ impl DecisionBackend for OpenJevBackend {
                 },
             );
         }
-        let mut state = format!("User repository search question:\n{query}\n\nSource candidates:\n");
+        let mut state =
+            format!("User repository search question:\n{query}\n\nSource candidates:\n");
         for candidate in candidates {
             state.push_str("---\n");
             state.push_str("candidate: ");
@@ -137,13 +133,12 @@ impl DecisionBackend for OpenJevBackend {
             .await?;
         let mut scores = Vec::with_capacity(candidates.len());
         for candidate in candidates {
-            let answer = response
-                .answers
-                .get(&candidate.id)
-                .ok_or_else(|| anyhow::anyhow!("missing probability for candidate {}", candidate.id))?;
-            let probability = answer
-                .noul
-                .ok_or_else(|| anyhow::anyhow!("missing probability for candidate {}", candidate.id))?;
+            let answer = response.answers.get(&candidate.id).ok_or_else(|| {
+                anyhow::anyhow!("missing probability for candidate {}", candidate.id)
+            })?;
+            let probability = answer.noul.ok_or_else(|| {
+                anyhow::anyhow!("missing probability for candidate {}", candidate.id)
+            })?;
             if !probability.is_finite() || !(0.0..=1.0).contains(&probability) {
                 return Err(anyhow::anyhow!(
                     "probability for candidate {} is outside [0, 1]",

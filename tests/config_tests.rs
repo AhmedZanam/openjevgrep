@@ -71,8 +71,11 @@ fn applies_cli_then_environment_then_project_then_user_precedence() {
 #[test]
 fn rejects_invalid_threshold() {
     let root = tempdir().expect("temporary root");
-    fs::write(root.path().join(".openjevgrep.toml"), "[search]\nthreshold = 1.5\n")
-        .expect("project config");
+    fs::write(
+        root.path().join(".openjevgrep.toml"),
+        "[search]\nthreshold = 1.5\n",
+    )
+    .expect("project config");
 
     let error = load_config_from_paths(
         &CliOverrides::default(),
@@ -98,10 +101,16 @@ fn parses_shorthand_and_explicit_search_with_repeated_scopes() {
     ])
     .expect("shorthand");
     assert_eq!(shorthand.query.as_deref(), Some("where is auth checked?"));
-    assert_eq!(shorthand.path.as_deref().map(|p| p.to_str().unwrap()), Some("src"));
-    assert_eq!(shorthand.scopes.len(), 2);
+    assert_eq!(
+        shorthand.path.as_deref().map(|p| p.to_str().unwrap()),
+        Some("src")
+    );
+    assert_eq!(shorthand.search.scopes.len(), 2);
 
     let explicit = Cli::try_parse_from(["ojg", "search", "where is auth checked?", "src"])
         .expect("explicit search");
-    assert!(matches!(explicit.command, Some(ojg_core::cli::Command::Search(_))));
+    assert!(matches!(
+        explicit.command,
+        Some(ojg_core::cli::Command::Search(_))
+    ));
 }

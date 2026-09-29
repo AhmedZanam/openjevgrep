@@ -89,7 +89,10 @@ pub struct ScanReport {
 pub fn scan_repository(root: &Path, options: &ScanOptions) -> Result<ScanReport> {
     let root = root.canonicalize()?;
     if !root.is_dir() {
-        return Err(anyhow::anyhow!("scan root is not a directory: {}", root.display()));
+        return Err(anyhow::anyhow!(
+            "scan root is not a directory: {}",
+            root.display()
+        ));
     }
 
     let ignore = build_ignore(&root, options)?;
@@ -227,8 +230,12 @@ pub fn scan_repository(root: &Path, options: &ScanOptions) -> Result<ScanReport>
         });
     }
 
-    report.included.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-    report.excluded.sort_by(|left, right| left.path.cmp(&right.path));
+    report
+        .included
+        .sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    report
+        .excluded
+        .sort_by(|left, right| left.path.cmp(&right.path));
     Ok(report)
 }
 
@@ -256,12 +263,8 @@ fn build_globset(patterns: &[String]) -> Result<GlobSet> {
 }
 
 fn is_hidden(path: &Path) -> bool {
-    path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_string_lossy()
-            .starts_with('.')
-    })
+    path.components()
+        .any(|component| component.as_os_str().to_string_lossy().starts_with('.'))
 }
 
 fn is_default_directory(path: &Path) -> bool {
@@ -281,9 +284,8 @@ fn is_default_directory(path: &Path) -> bool {
         ".gradle",
         ".idea",
     ];
-    path.components().any(|component| {
-        DEFAULTS.contains(&component.as_os_str().to_string_lossy().as_ref())
-    })
+    path.components()
+        .any(|component| DEFAULTS.contains(&component.as_os_str().to_string_lossy().as_ref()))
 }
 
 fn is_sensitive(path: &Path) -> bool {

@@ -24,7 +24,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Search(SearchCommand),
+    Search(Box<SearchCommand>),
     Init,
     Doctor,
     Inspect(InspectCommand),

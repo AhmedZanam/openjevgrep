@@ -14,8 +14,12 @@ fn fallback_exact_search_returns_literal_matches_and_line_numbers() {
         ..ExactOptions::default()
     };
 
-    let matches = exact_search("resolveCurrentFacilityId", &[root.path().to_path_buf()], &options)
-        .expect("exact matches");
+    let matches = exact_search(
+        "resolveCurrentFacilityId",
+        &[root.path().to_path_buf()],
+        &options,
+    )
+    .expect("exact matches");
     assert_eq!(matches.len(), 2);
     assert_eq!(matches[0].line, 2);
     assert_eq!(matches[0].path, "auth.rs");

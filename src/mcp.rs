@@ -5,9 +5,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::search::{search, BackendMetadata, SearchOptions, SearchRequest};
 use crate::backend::DecisionBackend;
 use crate::output::render_json;
+use crate::search::{search, BackendMetadata, SearchOptions, SearchRequest};
 use crate::Result;
 
 pub async fn handle_line(line: &str, backend: Arc<dyn DecisionBackend>) -> Result<String> {
@@ -62,7 +62,10 @@ async fn handle_tool(id: Value, params: Option<Value>, backend: Arc<dyn Decision
     if name != Some("semantic_search_code") {
         return error_response(id, -32602, "unknown tool");
     }
-    let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let args: SearchArguments = match serde_json::from_value(arguments) {
         Ok(args) => args,
         Err(error) => return error_response(id, -32602, &error.to_string()),
@@ -86,7 +89,10 @@ async fn handle_tool(id: Value, params: Option<Value>, backend: Arc<dyn Decision
         },
         options,
     };
-    match search(request, backend).await.and_then(|response| render_json(&response)) {
+    match search(request, backend)
+        .await
+        .and_then(|response| render_json(&response))
+    {
         Ok(text) => json!({
             "jsonrpc": "2.0",
             "id": id,

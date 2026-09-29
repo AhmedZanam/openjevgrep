@@ -1,7 +1,5 @@
 use ojg_core::output::{render_json, render_text, OutputMode};
-use ojg_core::search::{
-    BackendMetadata, Coverage, SearchResponse, SearchResult, Timing,
-};
+use ojg_core::search::{BackendMetadata, Coverage, SearchResponse, SearchResult, Timing};
 
 fn response() -> SearchResponse {
     SearchResponse {

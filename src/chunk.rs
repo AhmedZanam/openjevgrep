@@ -52,15 +52,7 @@ pub fn fallback_chunks(
                 if end - start <= max_lines {
                     chunks.push(make_chunk(file, &lines, start, end, ChunkKind::Paragraph));
                 } else {
-                    add_windows(
-                        &mut chunks,
-                        file,
-                        &lines,
-                        start,
-                        end,
-                        max_lines,
-                        overlap,
-                    );
+                    add_windows(&mut chunks, file, &lines, start, end, max_lines, overlap);
                 }
             }
         } else if paragraph_start.is_none() {

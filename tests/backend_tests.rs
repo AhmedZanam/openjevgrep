@@ -1,5 +1,5 @@
-use ojg_core::backend::{Candidate, DecisionBackend};
 use ojg_core::backend::openjev::OpenJevBackend;
+use ojg_core::backend::{Candidate, DecisionBackend};
 use ojg_core::config::BackendConfig;
 use serde_json::Value;
 use wiremock::matchers::{method, path};
@@ -39,16 +39,16 @@ async fn serializes_batched_noul_questions_and_parses_probabilities() {
         })))
         .mount(&server)
         .await;
-    let backend = OpenJevBackend::new(
-        backend_config(server.uri()),
-        reqwest::Client::new(),
-    )
-    .expect("backend");
+    let backend =
+        OpenJevBackend::new(backend_config(server.uri()), reqwest::Client::new()).expect("backend");
 
     let scores = backend
         .score_batch(
             "where is authentication validated?",
-            &[candidate("candidate-1", "fn validate() {}"), candidate("candidate-2", "fn log() {}")],
+            &[
+                candidate("candidate-1", "fn validate() {}"),
+                candidate("candidate-2", "fn log() {}"),
+            ],
         )
         .await
         .expect("scores");
@@ -79,14 +79,17 @@ async fn parses_model_catalog_and_health() {
         })))
         .mount(&server)
         .await;
-    let backend = OpenJevBackend::new(
-        backend_config(server.uri()),
-        reqwest::Client::new(),
-    )
-    .expect("backend");
+    let backend =
+        OpenJevBackend::new(backend_config(server.uri()), reqwest::Client::new()).expect("backend");
 
     let models = backend.models().await.expect("models");
-    assert_eq!(models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(), ["verdict-1.4", "laya-1.0"]);
+    assert_eq!(
+        models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["verdict-1.4", "laya-1.0"]
+    );
     assert!(backend.health().await.expect("health").reachable);
 }
 
@@ -101,11 +104,8 @@ async fn rejects_malformed_probability_answers() {
         })))
         .mount(&server)
         .await;
-    let backend = OpenJevBackend::new(
-        backend_config(server.uri()),
-        reqwest::Client::new(),
-    )
-    .expect("backend");
+    let backend =
+        OpenJevBackend::new(backend_config(server.uri()), reqwest::Client::new()).expect("backend");
 
     let error = backend
         .score_batch("query", &[candidate("candidate-1", "source")])
@@ -131,11 +131,8 @@ async fn retries_retryable_server_errors() {
         })))
         .mount(&server)
         .await;
-    let backend = OpenJevBackend::new(
-        backend_config(server.uri()),
-        reqwest::Client::new(),
-    )
-    .expect("backend");
+    let backend =
+        OpenJevBackend::new(backend_config(server.uri()), reqwest::Client::new()).expect("backend");
 
     let scores = backend
         .score_batch("query", &[candidate("candidate-1", "source")])
@@ -143,4 +140,3 @@ async fn retries_retryable_server_errors() {
         .expect("retry succeeds");
     assert_eq!(scores[0].probability, 0.8);
 }
-
